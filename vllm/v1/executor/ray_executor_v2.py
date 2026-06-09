@@ -257,7 +257,18 @@ class RayExecutorV2(MultiprocExecutor):
         # Step 1: Initialize Ray cluster and retrieve placement group
         if ray is None:
             raise ImportError("Using Ray backend requires installation of ray.")
-        initialize_ray_cluster(self.parallel_config, require_gpu_on_driver=False)
+        # Pin DP rank 0's bundle 0 to the driver node, where the local mp engine and
+        # data_parallel_master_ip live.
+        # Only needed when a cross-DP rendezvous exists
+        # (data_parallel_size > 1, i.e. MoE/EP);
+        # other DP groups and the single-DP / non-MoE cases need no such constraint.
+        require_gpu_on_driver = (
+            self.parallel_config.data_parallel_size > 1
+            and self.parallel_config.data_parallel_rank == 0
+        )
+        initialize_ray_cluster(
+            self.parallel_config, require_gpu_on_driver=require_gpu_on_driver
+        )
         placement_group = self.parallel_config.placement_group
 
         tp_size, pp_size, pcp_size = self._get_parallel_sizes()

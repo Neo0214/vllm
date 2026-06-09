@@ -1941,9 +1941,26 @@ class EngineArgs:
                     "data_parallel_backend can only be ray or mp, got %s",
                     self.data_parallel_backend,
                 )
-                data_parallel_address = (
-                    self.master_addr or ParallelConfig.data_parallel_master_ip
-                )
+                if (
+                    self.data_parallel_size > 1
+                    and self.distributed_executor_backend == "ray"
+                ):
+                    # With the Ray executor, DP workers can be scheduled on
+                    # remote nodes, so the loopback default (127.0.0.1) is not
+                    # reachable for the cross-node rendezvous. Use get_ip() to get the
+                    # node's routable IP, where the local mp DP engines and
+                    # global rank 0 live.
+                    host_ip = get_ip()
+                    logger.info(
+                        "Using host IP %s as data parallel address "
+                        "(mp backend with Ray executor)",
+                        host_ip,
+                    )
+                    data_parallel_address = host_ip
+                else:
+                    data_parallel_address = (
+                        self.master_addr or ParallelConfig.data_parallel_master_ip
+                    )
         else:
             data_parallel_address = self.data_parallel_address
 
